@@ -1,0 +1,26 @@
+Runtime Dependencies
+
+For Full Functionality:
+
+Ollama server must be running: ollama serve
+Write permissions to /tmp/ directory
+Network access for HTTP servers on specified ports
+
+Optional Dependencies
+For Production Deployment:
+
+gunicorn - WSGI server for production Flask deployment
+supervisor - Process management
+nginx - Reverse proxy (if needed)
+
+For Development:
+
+pytest - Testing framework
+black - Code formatting
+flake8 - Code linting
+
+Platform Compatibility
+
+Linux - Fully supported
+macOS - Fully supported
+Windows - Supported (may need to adjust file paths from /tmp/ to appropriate Windows temp directory)
