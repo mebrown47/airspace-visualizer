@@ -4,19 +4,19 @@
 This is a pre-release version of the Airspace Visualizer, an experimental real-time air traffic display and AI assistant for aviation data.  
 
 The system combines:
-- **Live ADS-B** aircraft tracking (via [`dump1090`](https://github.com/flightaware/dump1090))
+- **Live ADS-B** aircraft tracking (via [`readsb`](https://github.com/wiedehopf/readsb))
 - **Live ACARS/VDL2** message reception (via [`dumpvdl2`](https://github.com/szpajder/dumpvdl2))
 - **Radar-style HTML visualizer** with configurable controls
 - **Semantic RAG + Chat assistant** using local AI models (via Ollama)
-- Optional **geographic overlay** from OpenStreetMap or a local coastline API
+- Optional **geographic overlay** from OpenStreetMap
 
 ---
 
 ## 🚀 Features (Current Pre-Release)
 - Live radar-scope display with configurable range, trails, and filters.
 - Contact list and communications log.
-- ACARS message correlation with aircraft on the scope.
-- AI assistant for querying current traffic and message context.
+- ACARS message correlation with aircraft on the scope (blue text).
+- AI assistant for querying current traffic and message context (requires Ollama local install).
 - Geographic feature overlays (airports, cities, ports, etc.).
 - Modular bridge service for ADS-B and ACARS feeds.
 - Semantic search & chat endpoints with FAISS + embeddings.
@@ -29,7 +29,7 @@ The system combines:
 |------|---------|
 | `visualizer_bridge.py` | Serves ADS-B and ACARS data over HTTP (dump1090/dumpvdl2-compatible endpoints). |
 | `airspace_visualizer.html` | Browser-based radar display & control panel. |
-| `ai_server.py` | Semantic search + chat API using local LLM embeddings. |
+| `ai_server.py` | Semantic search + chat API using local LLM embeddings via Ollama. |
 | `quick_start.sh` | Helper script to launch the bridge & AI server. |
 | `readsb_ingest.sh` | Ingest script for ADS-B data from `readsb`/`dump1090`. |
 | `dumpvdl2_ingest.sh` | Ingest script for VDL2/ACARS data from `dumpvdl2`. |
