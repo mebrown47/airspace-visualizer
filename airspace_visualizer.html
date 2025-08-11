@@ -1,0 +1,1354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live ADS-B Radar Display with ACARS/VDL2</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Courier New', monospace;
+            background: #000;
+            color: #0f8f0f;
+            overflow: hidden;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 250px 1fr 350px;
+            grid-template-rows: 1fr 200px;
+            height: 100vh;
+            gap: 2px;
+            background: #0f4d0f;
+        }
+
+        .controls {
+            grid-column: 1;
+            grid-row: 1 / -1;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .radar-area {
+            grid-column: 2;
+            grid-row: 1;
+            position: relative;
+            background: #001100;
+            overflow: hidden;
+        }
+
+        .contact-list {
+            grid-column: 3;
+            grid-row: 1;
+        }
+
+        .comms-log {
+            grid-column: 2 / 4;
+            grid-row: 2;
+        }
+
+        .ai-assistant {
+            grid-column: 1 / -1;
+            grid-row: 3;
+            background: #002200;
+        }
+
+        .panel {
+            background: #000;
+            border: 2px solid #0f8f0f;
+            padding: 10px;
+        }
+
+        .panel h3 {
+            margin: 0 0 10px 0;
+            color: #0f8f0f;
+            text-align: center;
+            border-bottom: 1px solid #0f8f0f;
+            padding-bottom: 5px;
+        }
+
+        .radar-scope {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        #radarCanvas {
+            width: 100%;
+            height: 100%;
+            background: #001100;
+            display: block;
+        }
+
+        .control-group {
+            margin: 10px 0;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+
+        .slider {
+            width: 100%;
+            margin: 5px 0;
+        }
+
+        .checkbox {
+            margin: 5px 0;
+        }
+
+        .status-item {
+            font-size: 11px;
+            margin: 2px 0;
+            color: #0a7a0a;
+        }
+
+        .connect-btn {
+            width: 100%;
+            padding: 8px;
+            background: #0f4d0f;
+            color: #0f8f0f;
+            border: 1px solid #0f8f0f;
+            cursor: pointer;
+            font-family: inherit;
+            margin-bottom: 5px;
+        }
+
+        .connect-btn:hover {
+            background: #0f6f0f;
+        }
+
+        .connect-btn.connected {
+            background: #4f0f0f;
+            color: #ff6666;
+        }
+
+        .connect-btn.vdl2-connected {
+            background: #4f4f0f;
+            color: #ffaa00;
+        }
+
+        .contact-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+        }
+
+        .contact-table th,
+        .contact-table td {
+            border: 1px solid #0f4d0f;
+            padding: 2px 4px;
+            text-align: left;
+        }
+
+        .contact-table th {
+            background: #0f4d0f;
+            font-weight: bold;
+        }
+
+        .contact-table .acars-active {
+            background: #2a1a00;
+            color: #ffaa00;
+        }
+
+        .log-area {
+            height: 150px;
+            overflow-y: auto;
+            background: #000;
+            border: 1px solid #0f4d0f;
+            padding: 5px;
+            font-size: 11px;
+        }
+
+        .log-entry {
+            margin: 2px 0;
+            color: #0a7a0a;
+        }
+
+        .log-entry.acars {
+            color: #ffaa00;
+        }
+
+        .log-entry.vdl2 {
+            color: #ff9900;
+        }
+
+        .log-entry.correlation {
+            color: #00aaff;
+        }
+
+        .ai-input {
+            width: 80%;
+            padding: 8px;
+            background: #001100;
+            border: 1px solid #0f4d0f;
+            color: #0f8f0f;
+            font-family: inherit;
+        }
+
+        .ai-send {
+            padding: 8px 15px;
+            background: #0f4d0f;
+            color: #0f8f0f;
+            border: 1px solid #0f8f0f;
+            cursor: pointer;
+            font-family: inherit;
+        }
+
+        .config-section {
+            margin: 15px 0;
+            padding: 10px;
+            border: 1px solid #0f4d0f;
+            background: #001100;
+        }
+
+        .config-section h4 {
+            margin: 0 0 10px 0;
+            color: #0f8f0f;
+            font-size: 12px;
+        }
+
+        .config-input {
+            width: 100%;
+            padding: 4px;
+            background: #000;
+            border: 1px solid #0f4d0f;
+            color: #0f8f0f;
+            font-family: inherit;
+            font-size: 11px;
+        }
+
+        #aircraftDetailsBox {
+            position: absolute;
+            background: #001100;
+            border: 1px solid #0f8f0f;
+            padding: 8px;
+            z-index: 100;
+            display: none;
+            color: #00ff00;
+            font-size: 12px;
+            pointer-events: none;
+            box-shadow: 0 0 5px rgba(0,255,0,0.5);
+            min-width: 150px;
+        }
+
+        #aircraftDetailsBox h5 {
+            margin: 0 0 5px 0;
+            color: #0f8f0f;
+            text-align: center;
+            border-bottom: 1px solid #0f8f0f;
+            padding-bottom: 3px;
+            font-size: 13px;
+        }
+
+        #aircraftDetailsBox .detail-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 3px;
+        }
+
+        #aircraftDetailsBox .detail-item strong {
+            color: #0f8f0f;
+            margin-right: 5px;
+        }
+
+        .acars-indicator {
+            color: #ffaa00;
+            font-weight: bold;
+        }
+
+        .vdl2-status {
+            background: #1a1a00;
+            border: 1px solid #ffaa00;
+            padding: 5px;
+            margin: 5px 0;
+            font-size: 10px;
+        }
+
+        .geo-status {
+            background: #001a1a;
+            border: 1px solid #00aaaa;
+            padding: 5px;
+            margin: 5px 0;
+            font-size: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="panel controls">
+            <h3>🛩️ RADAR CONTROLS</h3>
+            
+            <div class="config-section">
+                <h4>dump1090 Configuration</h4>
+                <label>Server URL:</label>
+                <input type="text" id="dump1090Url" class="config-input" value="http://localhost:8080" placeholder="http://localhost:8080">
+                <br><br>
+                <label>Update Rate (seconds):</label>
+                <input type="number" id="updateRate" class="config-input" value="1" min="0.5" max="10" step="0.5">
+            </div>
+
+            <div class="config-section">
+                <h4>dumpvdl2 Configuration</h4>
+                <label>VDL2 Server URL:</label>
+                <input type="text" id="vdl2Url" class="config-input" value="http://localhost:8081" placeholder="http://localhost:8081">
+                <br><br>
+                <label>VDL2 Update Rate (seconds):</label>
+                <input type="number" id="vdl2UpdateRate" class="config-input" value="1" min="0.5" max="10" step="0.5">
+                <div class="vdl2-status">
+                    <div>VDL2 Messages: <span id="vdl2MessageCount">0</span></div>
+                    <div>Active Aircraft: <span id="acarsActiveCount">0</span></div>
+                </div>
+            </div>
+
+            <div class="config-section">
+                <h4>Geographic Data Source</h4>
+                <label>Data Source:</label>
+                <select id="geoDataSource" class="config-input">
+                    <option value="osm">OpenStreetMap (Global)</option>
+                    <option value="local">Local Server</option>
+                    <option value="none">No Geographic Data</option>
+                </select>
+                <div class="geo-status">
+                    <div>Features Loaded: <span id="geoFeatureCount">0</span></div>
+                    <div>Data Source: <span id="geoDataSourceStatus">None</span></div>
+                </div>
+                <button id="refreshGeoBtn" class="connect-btn" style="margin-top: 5px;">Refresh Geographic Data</button>
+            </div>
+
+            <div class="control-group">
+                <h4>Display Options</h4>
+                <div class="checkbox">
+                    <input type="checkbox" id="showTrails" checked>
+                    <label for="showTrails">🛤️ Show Trails</label>
+                </div>
+                <div class="checkbox">
+                    <input type="checkbox" id="showCoastline">
+                    <label for="showCoastline">🏖️ Show Geographic Features</label>
+                </div>
+                <div class="checkbox">
+                    <input type="checkbox" id="showACARSIndicators" checked>
+                    <label for="showACARSIndicators">📡 ACARS Indicators</label>
+                </div>
+                <label>Trail Length: <span id="trailValue">100</span></label>
+                <input type="range" id="trailLength" class="slider" min="10" max="200" value="100">
+            </div>
+
+            <div class="control-group">
+                <h4>Range Control</h4>
+                <label>Range: <span id="rangeValue">100</span> nm</label>
+                <input type="range" id="rangeSlider" class="slider" min="10" max="200" value="100">
+            </div>
+
+            <div class="config-section">
+                <h4>Radar Center Coordinates</h4>
+                <label>Latitude:</label>
+                <input type="number" id="centerLat" class="config-input" value="31.3228" step="0.0001">
+                <label>Longitude:</label>
+                <input type="number" id="centerLon" class="config-input" value="-86.0792" step="0.0001">
+                <button id="setCenterBtn" class="connect-btn" style="margin-top: 10px;">Set Radar Center</button>
+            </div>
+
+            <div class="control-group">
+                <h4>Data Feeds</h4>
+                <button id="connectBtn" class="connect-btn">Connect to dump1090</button>
+                <button id="connectVDL2Btn" class="connect-btn">Connect to dumpvdl2</button>
+            </div>
+
+            <div class="control-group">
+                <h4>System Status</h4>
+                <div class="status-item">Contacts: <span id="aircraftCount">0</span></div>
+                <div class="status-item">ACARS Active: <span id="acarsActiveDisplay">0</span></div>
+                <div class="status-item">Range: <span id="currentRange">100</span> nm</div>
+                <div class="status-item">Center: <span id="centerCoords">Auto-detect</span></div>
+                <div class="status-item">Updated: <span id="lastUpdate">--:--:--</span></div>
+                <div class="status-item">ADS-B: <span id="connectionStatus">Disconnected</span></div>
+                <div class="status-item">VDL2: <span id="vdl2Status">Disconnected</span></div>
+            </div>
+        </div>
+
+        <div class="panel radar-area">
+            <div class="radar-scope">
+                <canvas id="radarCanvas"></canvas>
+                <div id="aircraftDetailsBox">
+                    <h5 id="detailCallsign"></h5>
+                    <div class="detail-item"><strong>ICAO:</strong> <span id="detailHex"></span></div>
+                    <div class="detail-item"><strong>Lat:</strong> <span id="detailLat"></span></div>
+                    <div class="detail-item"><strong>Lon:</strong> <span id="detailLon"></span></div>
+                    <div class="detail-item"><strong>Alt:</strong> <span id="detailAlt"></span></div>
+                    <div class="detail-item"><strong>SOG:</strong> <span id="detailSOG"></span></div>
+                    <div class="detail-item"><strong>HDG:</strong> <span id="detailHDG"></span></div>
+                    <div class="detail-item"><strong>ACARS:</strong> <span id="detailACARSActivity"></span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel contact-list">
+            <h3>📡 Contact List</h3>
+            <table class="contact-table">
+                <thead>
+                    <tr>
+                        <th>CALLSIGN</th>
+                        <th>ICAO</th>
+                        <th>LAT</th>
+                        <th>LON</th>
+                        <th>ALT</th>
+                        <th>HDG</th>
+                        <th>ACARS</th>
+                    </tr>
+                </thead>
+                <tbody id="contactsTable">
+                </tbody>
+            </table>
+        </div>
+
+        <div class="panel comms-log">
+            <h3>📻 Communications Log</h3>
+            <div class="log-area" id="commsLog">
+                <div class="log-entry">System initialized - Ready for live ADS-B and VDL2 data</div>
+            </div>
+        </div>
+
+        <div class="panel ai-assistant">
+            <h3>🤖 AI Intelligence Assistant</h3>
+            <input type="text" id="aiInput" class="ai-input" placeholder="Ask AI about radar contacts, routes, ACARS messages...">
+            <button id="aiSend" class="ai-send">Send</button>
+            <span style="margin-left: 10px; font-size: 11px;">💡 Assistant ready to analyze radar data and ACARS communications.</span>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let canvas, ctx;
+        let aircraft = {};
+        let acarsMessages = [];
+        let vdl2MessageCount = 0;
+        let isConnected = false;
+        let isVDL2Connected = false;
+        let updateInterval = null;
+        let vdl2UpdateInterval = null;
+        let coastlineData = null;
+        let geoFeatures = [];
+
+        // Radar configuration
+        let radarCenterLat = 31.3228;
+        let radarCenterLon = -86.0792;
+        let RADAR_RANGE_NM = 100;
+
+        // Display options
+        let showTrails = true;
+        let showACARSIndicators = true;
+        let showCoastline = false;
+        let trailLength = 100;
+
+        let aircraftDetailsBox;
+
+        // Initialize
+        window.onload = function() {
+            init();
+        };
+
+        function init() {
+            canvas = document.getElementById('radarCanvas');
+            if (!canvas) {
+                console.error('Canvas element not found');
+                return;
+            }
+            ctx = canvas.getContext('2d');
+            aircraftDetailsBox = document.getElementById('aircraftDetailsBox');
+
+            const container = canvas.parentElement;
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            
+            console.log('Radar initialized - Canvas size:', canvas.width, 'x', canvas.height);
+            
+            updateRadar();
+            setInterval(updateRadar, 100);
+            setInterval(updateSystemStatus, 1000);
+            setInterval(cleanupOldACARSData, 30000);
+            
+            setupControls();
+            
+            showTrails = document.getElementById('showTrails').checked;
+            showACARSIndicators = document.getElementById('showACARSIndicators').checked;
+            showCoastline = document.getElementById('showCoastline').checked;
+            trailLength = parseInt(document.getElementById('trailLength').value);
+
+            document.getElementById('centerCoords').textContent = 
+                `${radarCenterLat.toFixed(4)}, ${radarCenterLon.toFixed(4)}`;
+        }
+
+        function setupControls() {
+            document.getElementById('rangeSlider').addEventListener('input', function(e) {
+                const newRange = parseInt(e.target.value);
+                RADAR_RANGE_NM = newRange;
+                document.getElementById('rangeValue').textContent = newRange;
+                if (showCoastline) {
+                    fetchGeographicData();
+                }
+                updateRadar();
+            });
+            
+            document.getElementById('trailLength').addEventListener('input', function(e) {
+                trailLength = parseInt(e.target.value);
+                document.getElementById('trailValue').textContent = trailLength;
+            });
+
+            document.getElementById('showTrails').addEventListener('change', function(e) {
+                showTrails = e.target.checked;
+                updateRadar();
+            });
+
+            document.getElementById('showACARSIndicators').addEventListener('change', function(e) {
+                showACARSIndicators = e.target.checked;
+                updateRadar();
+            });
+
+            document.getElementById('showCoastline').addEventListener('change', function(e) {
+                showCoastline = e.target.checked;
+                if (showCoastline) {
+                    fetchGeographicData();
+                } else {
+                    geoFeatures = [];
+                    document.getElementById('geoFeatureCount').textContent = '0';
+                }
+                updateRadar();
+            });
+
+            document.getElementById('refreshGeoBtn').addEventListener('click', function() {
+                if (showCoastline) {
+                    fetchGeographicData();
+                }
+            });
+
+            document.getElementById('geoDataSource').addEventListener('change', function(e) {
+                document.getElementById('geoDataSourceStatus').textContent = e.target.value;
+                if (showCoastline) {
+                    fetchGeographicData();
+                }
+            });
+            
+            document.getElementById('connectBtn').addEventListener('click', toggleConnection);
+            document.getElementById('connectVDL2Btn').addEventListener('click', toggleVDL2Connection);
+
+            canvas.addEventListener('contextmenu', handleRadarRightClick);
+            canvas.addEventListener('click', function() {
+                aircraftDetailsBox.style.display = 'none';
+            });
+
+            document.getElementById('setCenterBtn').addEventListener('click', function() {
+                const newLat = parseFloat(document.getElementById('centerLat').value);
+                const newLon = parseFloat(document.getElementById('centerLon').value);
+                if (!isNaN(newLat) && !isNaN(newLon)) {
+                    radarCenterLat = newLat;
+                    radarCenterLon = newLon;
+                    document.getElementById('centerCoords').textContent = 
+                        `${radarCenterLat.toFixed(4)}, ${radarCenterLon.toFixed(4)}`;
+                    addLogEntry(`Radar center set to: ${radarCenterLat.toFixed(4)}, ${radarCenterLon.toFixed(4)}`);
+                    if (showCoastline) {
+                        fetchGeographicData();
+                    }
+                    updateRadar();
+                }
+            });
+        }
+
+        // Geographic Data Functions
+        async function fetchGeographicData() {
+            const source = document.getElementById('geoDataSource').value;
+            
+            addLogEntry(`Fetching geographic data from ${source}...`);
+            
+            try {
+                switch (source) {
+                    case 'osm':
+                        await fetchOpenStreetMapData();
+                        break;
+//                    case 'local':
+//                        await fetchLocalCoastlineData();
+//                        break;
+                    case 'none':
+                        geoFeatures = [];
+                        break;
+                }
+                
+                document.getElementById('geoFeatureCount').textContent = geoFeatures.length;
+                updateRadar();
+            } catch (error) {
+                addLogEntry(`Geographic data fetch failed: ${error.message}`);
+                console.error('Geographic data error:', error);
+            }
+        }
+
+        async function fetchOpenStreetMapData() {
+            const rangeDeg = RADAR_RANGE_NM / 60.0;
+            const south = radarCenterLat - rangeDeg;
+            const north = radarCenterLat + rangeDeg;
+            const west = radarCenterLon - rangeDeg;
+            const east = radarCenterLon + rangeDeg;
+
+            const overpassQuery = `
+            [out:json][timeout:15];
+            (
+//              way["natural"="coastline"](${south},${west},${north},${east});
+//              way["waterway"~"river|stream"](${south},${west},${north},${east});
+//              way["natural"="water"](${south},${west},${north},${east});
+//              way["aeroway"="aerodrome"](${south},${west},${north},${east});
+              node["aeroway"="aerodrome"](${south},${west},${north},${east});
+              node["place"~"city|town"](${south},${west},${north},${east});
+              node["harbour"="yes"](${south},${west},${north},${east});
+            );
+            out geom;
+            `;
+
+            const response = await fetch('https://overpass-api.de/api/interpreter', {
+                method: 'POST',
+                body: overpassQuery,
+                headers: {
+                    'Content-Type': 'text/plain'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`OpenStreetMap API error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            geoFeatures = [];
+
+            for (const element of data.elements || []) {
+                const featureType = getOSMFeatureType(element);
+                if (featureType) {
+                    const coords = extractOSMCoordinates(element);
+                    for (const [lat, lon] of coords) {
+                        const distance = haversineDistance(radarCenterLat, radarCenterLon, lat, lon);
+                        if (distance <= RADAR_RANGE_NM) {
+                            geoFeatures.push({
+                                lat: lat,
+                                lon: lon,
+                                type: featureType,
+                                distance_nm: distance,
+                                name: element.tags?.name || ''
+                            });
+                        }
+                    }
+                }
+            }
+
+            addLogEntry(`Loaded ${geoFeatures.length} features from OpenStreetMap`);
+        }
+
+        function getOSMFeatureType(element) {
+            const tags = element.tags || {};
+            
+//            if (tags.natural === 'coastline') return 'coast';
+//            if (['river', 'stream'].includes(tags.waterway)) return 'river';
+//            if (tags.natural === 'water') return 'lake';
+            if (tags.aeroway === 'aerodrome') return 'airport';
+            if (['city', 'town'].includes(tags.place)) return 'city';
+            if (tags.harbour === 'yes') return 'port';
+            
+            return null;
+        }
+
+        function extractOSMCoordinates(element) {
+            const coords = [];
+            
+            if (element.type === 'node') {
+                coords.push([element.lat, element.lon]);
+            } else if (element.type === 'way' && element.geometry) {
+                const step = Math.max(1, Math.floor(element.geometry.length / 10));
+                for (let i = 0; i < element.geometry.length; i += step) {
+                    const point = element.geometry[i];
+                    coords.push([point.lat, point.lon]);
+                }
+            }
+            
+            return coords;
+        }
+
+        async function fetchLocalCoastlineData() {
+            try {
+                const dump1090Url = document.getElementById('dump1090Url').value;
+                const baseUrl = dump1090Url.replace('/tmp/aircraft.json', '');
+                
+                const url = `${baseUrl}/api/coastline?lat=${radarCenterLat}&lon=${radarCenterLon}&range=${RADAR_RANGE_NM}`;
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    geoFeatures = data.data.features || [];
+                    addLogEntry(`Loaded ${geoFeatures.length} features from local server`);
+                } else {
+                    throw new Error(data.error || 'Local server error');
+                }
+            } catch (error) {
+                addLogEntry(`Local coastline data unavailable: ${error.message}`);
+                geoFeatures = [];
+            }
+        }
+
+        function haversineDistance(lat1, lon1, lat2, lon2) {
+            const R = 3440.065; // Earth's radius in nautical miles
+            
+            const lat1Rad = lat1 * Math.PI / 180;
+            const lon1Rad = lon1 * Math.PI / 180;
+            const lat2Rad = lat2 * Math.PI / 180;
+            const lon2Rad = lon2 * Math.PI / 180;
+            
+            const dlat = lat2Rad - lat1Rad;
+            const dlon = lon2Rad - lon1Rad;
+            
+            const a = Math.sin(dlat/2)**2 + Math.cos(lat1Rad) * Math.cos(lat2Rad) * Math.sin(dlon/2)**2;
+            const c = 2 * Math.asin(Math.sqrt(a));
+            
+            return R * c;
+        }
+
+        function toggleConnection() {
+            const btn = document.getElementById('connectBtn');
+            
+            if (!isConnected) {
+                const dump1090Url = document.getElementById('dump1090Url').value;
+                const updateRate = parseFloat(document.getElementById('updateRate').value) * 1000;
+                
+                fetch(dump1090Url + '/tmp/aircraft.json')
+                    .then(response => response.json())
+                    .then(data => {
+                        isConnected = true;
+                        btn.textContent = 'Stop ADS-B Feed';
+                        btn.classList.add('connected');
+                        document.getElementById('connectionStatus').textContent = 'Connected';
+                        
+                        addLogEntry('Connected to dump1090 at ' + dump1090Url);
+                        
+                        updateInterval = setInterval(() => {
+                            fetchAircraftData();
+                        }, updateRate);
+                        
+                        fetchAircraftData();
+                    })
+                    .catch(error => {
+                        console.error('Connection failed:', error);
+                        addLogEntry('Failed to connect to dump1090 - Check URL and ensure dump1090 is running');
+                        document.getElementById('connectionStatus').textContent = 'Connection Failed';
+                    });
+            } else {
+                isConnected = false;
+                btn.textContent = 'Connect to dump1090';
+                btn.classList.remove('connected');
+                document.getElementById('connectionStatus').textContent = 'Disconnected';
+                
+                if (updateInterval) {
+                    clearInterval(updateInterval);
+                    updateInterval = null;
+                }
+                
+                aircraft = {};
+                addLogEntry('Disconnected from dump1090');
+            }
+        }
+
+        function toggleVDL2Connection() {
+            const btn = document.getElementById('connectVDL2Btn');
+            
+            if (!isVDL2Connected) {
+                const vdl2Url = document.getElementById('vdl2Url').value;
+                const vdl2UpdateRate = parseFloat(document.getElementById('vdl2UpdateRate').value) * 1000;
+                
+                fetch(vdl2Url + '/tmp/vdl2.json')
+                    .then(response => response.json())
+                    .then(data => {
+                        isVDL2Connected = true;
+                        btn.textContent = 'Stop VDL2 Feed';
+                        btn.classList.add('vdl2-connected');
+                        document.getElementById('vdl2Status').textContent = 'Connected';
+                        
+                        addLogEntry('Connected to dumpvdl2 at ' + vdl2Url, 'vdl2');
+                        
+                        vdl2UpdateInterval = setInterval(() => {
+                            fetchVDL2Data();
+                        }, vdl2UpdateRate);
+                        
+                        fetchVDL2Data();
+                    })
+                    .catch(error => {
+                        console.error('VDL2 connection failed:', error);
+                        addLogEntry('Failed to connect to dumpvdl2 - Check URL and ensure dumpvdl2 is running', 'vdl2');
+                        document.getElementById('vdl2Status').textContent = 'Connection Failed';
+                    });
+            } else {
+                isVDL2Connected = false;
+                btn.textContent = 'Connect to dumpvdl2';
+                btn.classList.remove('vdl2-connected');
+                document.getElementById('vdl2Status').textContent = 'Disconnected';
+                
+                if (vdl2UpdateInterval) {
+                    clearInterval(vdl2UpdateInterval);
+                    vdl2UpdateInterval = null;
+                }
+                
+                addLogEntry('Disconnected from dumpvdl2', 'vdl2');
+            }
+        }
+
+        function fetchAircraftData() {
+            const dump1090Url = document.getElementById('dump1090Url').value;
+            
+            fetch(dump1090Url + '/tmp/aircraft.json')
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.aircraft) {
+                        updateAircraftDataAndTrails(data.aircraft);
+                    }
+                })
+                .catch(error => {
+                    console.error('Data fetch error:', error);
+                    addLogEntry('Data fetch error - check dump1090 connection');
+                });
+        }
+
+        function fetchVDL2Data() {
+            const vdl2Url = document.getElementById('vdl2Url').value;
+            
+            fetch(vdl2Url + '/tmp/vdl2.json')
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.vdl2 && data.vdl2.avlc) {
+                        const messageTime = data.vdl2.t?.sec || Date.now()/1000;
+                        
+                        if (!window.lastVDL2Time || Math.abs(messageTime - window.lastVDL2Time) > 2) {
+                            window.lastVDL2Time = messageTime;
+                            processVDL2Message(data.vdl2);
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('VDL2 fetch error:', error);
+                });
+        }
+
+        function processVDL2Message(vdl2Data) {
+            vdl2MessageCount++;
+            
+            const srcAddr = vdl2Data.avlc?.src?.addr || 'Unknown';
+            const dstAddr = vdl2Data.avlc?.dst?.addr || 'Unknown';
+            const frameType = vdl2Data.avlc?.frame_type || 'I';
+            const command = vdl2Data.avlc?.cmd || 'Data';
+            const freq = vdl2Data.freq ? (vdl2Data.freq / 1000000).toFixed(3) : 'N/A';
+            const signalLevel = vdl2Data.sig_level?.toFixed(1) || 'N/A';
+            
+            const acarsText = vdl2Data.acars?.msg_text || '';
+            const flight = vdl2Data.acars?.flight || '';
+            
+            let logMessage = `VDL2 ${freq}MHz (${signalLevel}dBm): ${srcAddr}→${dstAddr} [${frameType}] ${command}`;
+            if (flight) {
+                logMessage += ` ${flight}`;
+            }
+            if (acarsText) {
+                logMessage += ` - "${acarsText}"`;
+            }
+            
+            addLogEntry(logMessage, 'vdl2');
+            
+            if (srcAddr !== 'Unknown') {
+                correlateACARSWithAircraft(srcAddr, vdl2Data);
+            }
+            
+            updateVDL2Statistics();
+        }
+
+        function correlateACARSWithAircraft(acarsAddr, vdl2Data) {
+            let correlationFound = false;
+            
+            Object.values(aircraft).forEach(ac => {
+                if (ac.hex && ac.hex.toUpperCase() === acarsAddr.toUpperCase()) {
+                    addLogEntry(`ACARS correlation: ${ac.flight || ac.hex} - VDL2 activity detected`, 'correlation');
+                    
+                    ac.hasACARSActivity = true;
+                    ac.lastACARSTime = vdl2Data.t?.sec || Date.now()/1000;
+                    ac.acarsMessageCount = (ac.acarsMessageCount || 0) + 1;
+                    
+                    correlationFound = true;
+                }
+            });
+            
+            if (!correlationFound && acarsAddr !== 'Unknown') {
+                addLogEntry(`VDL2 from unknown aircraft: ${acarsAddr}`, 'vdl2');
+            }
+        }
+
+        function updateAircraftDataAndTrails(newAircraftData) {
+            const currentAircraftHexes = new Set(Object.keys(aircraft));
+            const newAircraftHexes = new Set(newAircraftData.map(ac => ac.hex));
+
+            currentAircraftHexes.forEach(hex => {
+                if (!newAircraftHexes.has(hex)) {
+                    addLogEntry(`Aircraft lost: ${aircraft[hex].flight || hex}`);
+                    delete aircraft[hex];
+                }
+            });
+
+            newAircraftData.forEach(newAc => {
+                if (newAc.lat && newAc.lon && newAc.lat !== 0 && newAc.lon !== 0) {
+                    if (!aircraft[newAc.hex]) {
+                        aircraft[newAc.hex] = { ...newAc, trail: [] };
+                        addLogEntry(`New aircraft detected: ${newAc.flight || newAc.hex} at ${newAc.lat.toFixed(4)}, ${newAc.lon.toFixed(4)}`);
+                    } else {
+                        const existingAc = aircraft[newAc.hex];
+                        Object.assign(existingAc, newAc);
+                    }
+                    
+                    if (aircraft[newAc.hex].lat && aircraft[newAc.hex].lon) {
+                        aircraft[newAc.hex].trail.push({ lat: aircraft[newAc.hex].lat, lon: aircraft[newAc.hex].lon });
+                    }
+
+                    if (aircraft[newAc.hex].trail.length > trailLength) {
+                        aircraft[newAc.hex].trail.shift();
+                    }
+                }
+            });
+            updateContactList();
+        }
+
+        function updateContactList() {
+            const table = document.getElementById('contactsTable');
+            table.innerHTML = '';
+            
+            const sortedAircraft = Object.values(aircraft).sort((a, b) => {
+                const flightA = (a.flight || '').toUpperCase();
+                const flightB = (b.flight || '').toUpperCase();
+                if (flightA < flightB) return -1;
+                if (flightA > flightB) return 1;
+                return 0;
+            });
+
+            sortedAircraft.forEach(ac => {
+                const row = table.insertRow();
+                
+                const hasRecentACARSActivity = ac.hasACARSActivity && 
+                    (Date.now()/1000 - ac.lastACARSTime) < 300;
+                
+                if (hasRecentACARSActivity) {
+                    row.className = 'acars-active';
+                }
+                
+                row.insertCell(0).textContent = ac.flight || 'Unknown';
+                row.insertCell(1).textContent = ac.hex || 'N/A';
+                row.insertCell(2).textContent = ac.lat ? ac.lat.toFixed(4) : 'N/A';
+                row.insertCell(3).textContent = ac.lon ? ac.lon.toFixed(4) : 'N/A';
+                row.insertCell(4).textContent = ac.altitude ? `${ac.altitude}ft` : 'N/A';
+                row.insertCell(5).textContent = ac.track ? Math.round(ac.track) + '°' : 'N/A';
+                
+                const acarsCell = row.insertCell(6);
+                if (hasRecentACARSActivity) {
+                    acarsCell.innerHTML = `<span class="acars-indicator">●</span> ${ac.acarsMessageCount || 0}`;
+                } else {
+                    acarsCell.textContent = '-';
+                }
+            });
+        }
+
+        function updateRadar() {
+            if (!ctx) return;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (showCoastline && geoFeatures.length > 0) {
+                drawGeographicFeatures();
+            }
+            
+            drawRadarRings();
+            
+            if (radarCenterLat !== null && radarCenterLon !== null) {
+                drawAircraft();
+            }
+        }
+
+        function drawGeographicFeatures() {
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const maxRadius = Math.min(centerX, centerY) - 20;
+            
+            // Group features by type for drawing
+            const featuresByType = {};
+            geoFeatures.forEach(feature => {
+                if (!featuresByType[feature.type]) {
+                    featuresByType[feature.type] = [];
+                }
+                featuresByType[feature.type].push(feature);
+            });
+
+            // Draw different feature types
+            Object.entries(featuresByType).forEach(([type, features]) => {
+                drawFeatureType(type, features, centerX, centerY, maxRadius);
+            });
+            
+            // Add feature count info
+            ctx.fillStyle = '#4a8a4a';
+            ctx.font = '12px Courier New';
+            ctx.fillText(`Geographic Features: ${geoFeatures.length}`, 10, canvas.height - 10);
+        }
+
+        function drawFeatureType(type, features, centerX, centerY, maxRadius) {
+            const styles = {
+                coast: { color: '#4a8a4a', size: 5, label: 'COAST' },
+                river: { color: '#4a6a8a', size: 4, label: 'RIVER' },
+                lake: { color: '#6a8aaa', size: 6, label: 'LAKE' },
+                airport: { color: '#aa4a6a', size: 8, label: 'AIRPORT' },
+                city: { color: '#aa8a4a', size: 6, label: 'CITY' },
+                port: { color: '#8a4aaa', size: 5, label: 'PORT' }
+            };
+
+            const style = styles[type] || { color: '#666666', size: 3, label: type.toUpperCase() };
+            
+            features.forEach(feature => {
+                const screenPos = getScreenPosition(feature.lat, feature.lon, centerX, centerY, maxRadius);
+                const x = screenPos.x;
+                const y = screenPos.y;
+                
+                if (x > 0 && y > 0 && x < canvas.width && y < canvas.height) {
+                    ctx.fillStyle = style.color;
+                    ctx.strokeStyle = style.color;
+                    ctx.lineWidth = 2;
+                    
+                    if (type === 'airport') {
+                        // Draw airport symbol (cross)
+                        ctx.beginPath();
+                        ctx.moveTo(x-style.size, y);
+                        ctx.lineTo(x+style.size, y);
+                        ctx.moveTo(x, y-style.size);
+                        ctx.lineTo(x, y+style.size);
+                        ctx.stroke();
+                    } else if (type === 'city') {
+                        // Draw city symbol (square)
+                        ctx.fillRect(x-style.size/2, y-style.size/2, style.size, style.size);
+                        ctx.strokeRect(x-style.size/2, y-style.size/2, style.size, style.size);
+                    } else {
+                        // Draw circle for other features
+                        ctx.beginPath();
+                        ctx.arc(x, y, style.size, 0, 2 * Math.PI);
+                        ctx.fill();
+                        ctx.stroke();
+                    }
+                    
+                    // Add label if feature has a name
+                    if (feature.name) {
+                        ctx.fillStyle = style.color;
+                        ctx.font = '10px Courier New';
+                        ctx.fillText(feature.name, x + style.size + 2, y - 2);
+                    }
+                }
+            });
+
+            // Connect coastline points
+            if (type === 'coast' && features.length > 1) {
+                ctx.strokeStyle = style.color;
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 3]);
+                ctx.beginPath();
+                
+                const sortedFeatures = features.sort((a, b) => a.lon - b.lon);
+                sortedFeatures.forEach((feature, i) => {
+                    const screenPos = getScreenPosition(feature.lat, feature.lon, centerX, centerY, maxRadius);
+                    if (i === 0) {
+                        ctx.moveTo(screenPos.x, screenPos.y);
+                    } else {
+                        ctx.lineTo(screenPos.x, screenPos.y);
+                    }
+                });
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+
+        function getScreenPosition(lat, lon, centerX, centerY, maxRadius) {
+            const R = 6371e3;
+            const phi1 = radarCenterLat * Math.PI / 180;
+            const lambda1 = radarCenterLon * Math.PI / 180;
+            const phi2 = lat * Math.PI / 180;
+            const lambda2 = lon * Math.PI / 180;
+
+            const deltaPhi = phi2 - phi1;
+            const deltaLambda = lambda2 - lambda1;
+
+            const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+                      Math.cos(phi1) * Math.cos(phi2) *
+                      Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            const distanceMetres = R * c;
+
+            const nmDistance = distanceMetres / 1852;
+            const pixelDistance = (nmDistance / RADAR_RANGE_NM) * maxRadius;
+
+            const y_bearing = Math.sin(lambda2 - lambda1) * Math.cos(phi2);
+            const x_bearing = Math.cos(phi1) * Math.sin(phi2) -
+                              Math.sin(phi1) * Math.cos(phi2) * Math.cos(lambda2 - lambda1);
+            const bearing = Math.atan2(y_bearing, x_bearing) * 180 / Math.PI;
+            
+            const canvasAngle = (180 - bearing) * Math.PI / 180; 
+
+            const x = centerX + pixelDistance * Math.sin(canvasAngle);
+            const y = centerY + pixelDistance * Math.cos(canvasAngle);
+
+            return { x, y, nmDistance };
+        }
+
+        function drawRadarRings() {
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const maxRadius = Math.min(centerX, centerY) - 20;
+            
+            ctx.strokeStyle = '#0f4d0f';
+            ctx.lineWidth = 1;
+            
+            for (let ring = 1; ring <= 5; ring++) {
+                const radius = (maxRadius * ring) / 5;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+                ctx.stroke();
+                
+                const rangeLabel = Math.round((RADAR_RANGE_NM * ring) / 5);
+                ctx.fillStyle = '#0f8f0f';
+                ctx.font = '12px Courier New';
+                ctx.fillText(rangeLabel.toString(), centerX + radius - 10, centerY - 5);
+            }
+            
+            ctx.beginPath();
+            ctx.moveTo(centerX - maxRadius, centerY);
+            ctx.lineTo(centerX + maxRadius, centerY);
+            ctx.moveTo(centerX, centerY - maxRadius);
+            ctx.lineTo(centerX, centerY + maxRadius);
+            ctx.stroke();
+        }
+
+        function drawAircraft() {
+            if (!radarCenterLat || !radarCenterLon) return;
+            
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const maxRadius = Math.min(centerX, centerY) - 20;
+            
+            Object.values(aircraft).forEach(ac => {
+                if (!ac.lat || !ac.lon) return;
+                
+                const screenPos = getScreenPosition(ac.lat, ac.lon, centerX, centerY, maxRadius);
+                const x = screenPos.x;
+                const y = screenPos.y;
+                const nmDistance = screenPos.nmDistance;
+                
+                if (nmDistance > RADAR_RANGE_NM) return;
+                
+                if (showTrails && ac.trail && ac.trail.length > 1) {
+                    ctx.beginPath();
+                    ctx.strokeStyle = '#006600';
+                    ctx.lineWidth = 1;
+                    
+                    ac.trail.forEach((pos, index) => {
+                        const trailPos = getScreenPosition(pos.lat, pos.lon, centerX, centerY, maxRadius);
+                        
+                        if (trailPos.nmDistance <= RADAR_RANGE_NM) {
+                            if (index === 0) {
+                                ctx.moveTo(trailPos.x, trailPos.y);
+                            } else {
+                                ctx.lineTo(trailPos.x, trailPos.y);
+                            }
+                        }
+                    });
+                    ctx.stroke();
+                }
+
+                const hasRecentACARSActivity = ac.hasACARSActivity && 
+                    (Date.now()/1000 - ac.lastACARSTime) < 300;
+
+                if (showACARSIndicators && hasRecentACARSActivity) {
+                    ctx.strokeStyle = '#ffaa00';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(x-8, y-8, 16, 16);
+                }
+
+                ctx.fillStyle = hasRecentACARSActivity ? '#ffaa00' : '#00ff00';
+                ctx.beginPath();
+                
+                if (ac.track) {
+                    const trackRad = (ac.track * Math.PI) / 180;
+                    const size = 6;
+                    
+                    const x1 = x + size * Math.sin(trackRad); 
+                    const y1 = y - size * Math.cos(trackRad);
+                    const x2 = x + size * Math.sin(trackRad - (2 * Math.PI / 3));
+                    const y2 = y - size * Math.cos(trackRad - (2 * Math.PI / 3));
+                    const x3 = x + size * Math.sin(trackRad + (2 * Math.PI / 3));
+                    const y3 = y - size * Math.cos(trackRad + (2 * Math.PI / 3));
+                    
+                    ctx.moveTo(x1, y1);
+                    ctx.lineTo(x2, y2);
+                    ctx.lineTo(x3, y3);
+                    ctx.closePath();
+                } else {
+                    ctx.arc(x, y, 4, 0, 2 * Math.PI);
+                }
+                
+                ctx.fill();
+                
+                ctx.fillStyle = hasRecentACARSActivity ? '#ffaa00' : '#00ff00';
+                ctx.font = '10px Courier New';
+                const label = ac.flight || ac.hex;
+                const altLabel = ac.altitude ? `${ac.altitude}ft` : '';
+                ctx.fillText(label, x + 8, y - 8);
+                if (altLabel) {
+                    ctx.fillText(altLabel, x + 8, y + 4);
+                }
+                
+                ac.screenX = x;
+                ac.screenY = y;
+                ac.pixelRadius = ac.track ? 6 : 4;
+            });
+        }
+
+        function updateSystemStatus() {
+            const now = new Date();
+            
+            document.getElementById('aircraftCount').textContent = Object.keys(aircraft).length;
+            
+            const acarsActiveCount = Object.values(aircraft).filter(ac => 
+                ac.hasACARSActivity && (Date.now()/1000 - ac.lastACARSTime) < 300
+            ).length;
+            
+            document.getElementById('acarsActiveDisplay').textContent = acarsActiveCount;
+            document.getElementById('currentRange').textContent = RADAR_RANGE_NM;
+            document.getElementById('centerCoords').textContent = 
+                `${radarCenterLat.toFixed(4)}, ${radarCenterLon.toFixed(4)}`;
+            document.getElementById('lastUpdate').textContent = now.toLocaleTimeString();
+        }
+
+        function updateVDL2Statistics() {
+            document.getElementById('vdl2MessageCount').textContent = vdl2MessageCount;
+            
+            const acarsActiveCount = Object.values(aircraft).filter(ac => 
+                ac.hasACARSActivity && (Date.now()/1000 - ac.lastACARSTime) < 300
+            ).length;
+            
+            document.getElementById('acarsActiveCount').textContent = acarsActiveCount;
+        }
+
+        function cleanupOldACARSData() {
+            const cutoffTime = Date.now()/1000 - 3600;
+            
+            acarsMessages = acarsMessages.filter(msg => msg.timestamp > cutoffTime);
+            
+            Object.values(aircraft).forEach(ac => {
+                if (ac.hasACARSActivity && ac.lastACARSTime < cutoffTime) {
+                    ac.hasACARSActivity = false;
+                }
+            });
+        }
+
+        function addLogEntry(message, type = 'default') {
+            const log = document.getElementById('commsLog');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function handleRadarRightClick(event) {
+            event.preventDefault();
+
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = event.clientX - rect.left;
+            const mouseY = event.clientY - rect.top;
+
+            let clickedAircraft = null;
+
+            Object.values(aircraft).forEach(ac => {
+                if (ac.screenX !== undefined && ac.screenY !== undefined) {
+                    const dist = Math.sqrt(
+                        Math.pow(mouseX - ac.screenX, 2) +
+                        Math.pow(mouseY - ac.screenY, 2)
+                    );
+                    if (dist < (ac.pixelRadius || 4) + 5) { 
+                        clickedAircraft = ac;
+                        return;
+                    }
+                }
+            });
+
+            if (clickedAircraft) {
+                displayAircraftDetails(clickedAircraft, mouseX, mouseY);
+            } else {
+                aircraftDetailsBox.style.display = 'none';
+            }
+        }
+
+        function displayAircraftDetails(ac, x, y) {
+            document.getElementById('detailCallsign').textContent = ac.flight || 'Unknown';
+            document.getElementById('detailHex').textContent = ac.hex || 'N/A';
+            document.getElementById('detailLat').textContent = ac.lat ? ac.lat.toFixed(6) : 'N/A';
+            document.getElementById('detailLon').textContent = ac.lon ? ac.lon.toFixed(6) : 'N/A';
+            document.getElementById('detailAlt').textContent = ac.altitude ? `${ac.altitude} ft` : 'N/A';
+            document.getElementById('detailSOG').textContent = ac.gs ? `${ac.gs.toFixed(0)} kts` : 'N/A';
+            document.getElementById('detailHDG').textContent = ac.track ? `${Math.round(ac.track)}°` : 'N/A';
+            
+            const acarsActivity = ac.hasACARSActivity ? 
+                `${ac.acarsMessageCount || 0} msgs` : 
+                'None detected';
+            document.getElementById('detailACARSActivity').textContent = acarsActivity;
+
+            aircraftDetailsBox.style.left = `${x + 10}px`;
+            aircraftDetailsBox.style.top = `${y + 10}px`;
+            aircraftDetailsBox.style.display = 'block';
+
+            const rect = canvas.getBoundingClientRect();
+            const boxRect = aircraftDetailsBox.getBoundingClientRect();
+
+            if (boxRect.right > rect.width) {
+                aircraftDetailsBox.style.left = `${x - boxRect.width - 10}px`;
+            }
+            if (boxRect.bottom > rect.height) {
+                aircraftDetailsBox.style.top = `${y - boxRect.height - 10}px`;
+            }
+        }
+
+        /// AI Assistant functionality
+        document.getElementById('aiSend').addEventListener('click', async function () {
+            const inputBox = document.getElementById('aiInput');
+            const input = inputBox.value.trim();
+            const log = document.getElementById('commsLog');
+
+            if (!input) return;
+
+            inputBox.disabled = true;
+             log.innerHTML += `<div class="log-entry">🧠 You: ${input}</div>`;
+
+            try {
+                const res = await fetch(`http://localhost:11435/ask?q=${encodeURIComponent(input)}`);
+                const data = await res.json();
+
+                if (data.results && Array.isArray(data.results)) {
+                    data.results.forEach(response => {
+                        log.innerHTML += `<div class="log-entry acars">🤖 AI: ${response}</div>`;
+                    });
+                } else if (data.answer) {
+                    log.innerHTML += `<div class="log-entry acars">🤖 AI: ${data.answer}</div>`;
+                } else if (data.error) {
+                    log.innerHTML += `<div class="log-entry error">❌ Error: ${data.error}</div>`;
+                } else {
+                    log.innerHTML += `<div class="log-entry">⚠️ Unexpected response from AI assistant</div>`;
+                }
+            } catch (err) {
+                log.innerHTML += `<div class="log-entry error">❌ Connection error: ${err.message}</div>`;
+            } finally {
+                inputBox.disabled = false;
+                inputBox.value = '';
+                log.scrollTop = log.scrollHeight;
+            }
+        });
+    </script>
+</body>
+</html>
