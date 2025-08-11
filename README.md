@@ -51,20 +51,21 @@ The system combines:
    cd airspace-visualizer
    pip install -r requirements.txt
    ```
-
-3. **Run Data Bridges**
+3. **Run python mock_data_generator.py first to generate test data, then start the other services.
+   
+4. **Run Data Bridges**
    ```bash
    ./readsb_ingest.sh &
    ./dumpvdl2_ingest.sh &
    python3 visualizer_bridge.py
    ```
 
-4. **Start AI Server**
+5. **Start AI Server**
    ```bash
    python3 ai_server.py
    ```
 
-5. **Open Visualizer**
+6. **Open Visualizer**
    - Serve `airspace_visualizer.html` from a local web server.
    - Configure the dump1090 & dumpvdl2 URLs in the **Radar Controls** panel.
    - Click **Connect** to start receiving live data.
