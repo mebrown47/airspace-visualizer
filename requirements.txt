@@ -1,0 +1,31 @@
+# Requirements for Aviation Data Pipeline
+# Core dependencies for UDP Bridge, AI Server, and Mock Data Generator
+
+# Web framework and CORS support
+Flask==2.3.3
+flask-cors==4.0.0
+
+# Numeric computing and vector operations
+numpy==1.24.3
+
+# Vector similarity search (CPU version)
+faiss-cpu==1.7.4
+
+# Local LLM integration
+ollama==0.1.7
+
+# Data analysis and visualization (for Streamlit dashboard)
+pandas==2.0.3
+matplotlib==3.7.2
+seaborn==0.12.2
+plotly==5.15.0
+streamlit==1.25.0
+
+# Optional: Production deployment
+# gunicorn==21.2.0
+# supervisor==4.2.4
+
+# Optional: Development tools
+# pytest==7.4.0
+# black==23.7.0
+# flake8==6.0.0
